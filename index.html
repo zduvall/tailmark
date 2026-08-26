@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Real-time flight status lookup web application powered by AirLabs API with client-side caching."
+      content="Real-time flight status lookup web application powered by AeroDataBox API via RapidAPI with client-side caching."
     />
     <title>Tailmark - Real-Time Flight Status Lookup</title>
     <link rel="stylesheet" href="styles.css" />
@@ -32,7 +32,7 @@
             />
           </svg>
           <span class="logo-text">Tailmark</span>
-          <span class="badge badge-poc">AirLabs API Tracker</span>
+          <span class="badge badge-poc">AeroDataBox API Tracker</span>
         </div>
         <div id="headerApiKeyStatus" class="header-api-status">
           <!-- Injected via JS -->
@@ -58,13 +58,13 @@
                   d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
                 ></path>
               </svg>
-              <h2>AirLabs API Key Configuration (BYOK)</h2>
+              <h2>RapidAPI Key Configuration (BYOK)</h2>
             </div>
             <span class="key-badge" id="keyConfigStatus">Not Configured</span>
           </div>
 
           <p class="section-desc">
-            Enter your free AirLabs API key to start tracking flights. Your key
+            Enter your free RapidAPI key to start tracking flights via AeroDataBox. Your key
             is stored locally in your browser (<code>localStorage</code>) and is
             never transmitted to any third-party server.
           </p>
@@ -73,12 +73,12 @@
           <form id="apiKeyForm" class="api-key-form">
             <div class="input-group">
               <label for="apiKeyInput" class="visually-hidden"
-                >AirLabs API Key</label
+                >RapidAPI Key</label
               >
               <input
                 type="password"
                 id="apiKeyInput"
-                placeholder="e.g. 12345678-abcd-1234-abcd-123456789abc"
+                placeholder="Enter your RapidAPI Key (e.g. 89abc12345...)"
                 autocomplete="off"
                 required
               />
@@ -106,14 +106,14 @@
               </button>
             </div>
             <div class="api-key-help">
-              <span>Don't have an API key?</span>
+              <span>Don't have a RapidAPI key?</span>
               <a
-                href="https://airlabs.co/"
+                href="https://rapidapi.com/aerodatabox/api/aerodatabox"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="link-external"
               >
-                Get free API key at AirLabs.co &rarr;
+                Get free API key at RapidAPI.com &rarr;
               </a>
             </div>
           </form>
@@ -223,8 +223,8 @@
       <footer class="app-footer">
         <p>
           Tailmark Proof of Concept &bull; Powered by
-          <a href="https://airlabs.co" target="_blank" rel="noopener noreferrer"
-            >AirLabs API</a
+          <a href="https://rapidapi.com/aerodatabox/api/aerodatabox" target="_blank" rel="noopener noreferrer"
+            >AeroDataBox API via RapidAPI</a
           >
           &bull; Browser Client Caching (10 min TTL)
         </p>

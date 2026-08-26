@@ -1,13 +1,13 @@
 /**
  * Tailmark Flight Status Tracker - Core Application Logic
- * AirLabs API Integration & 10-Minute LocalStorage Caching System
+ * AeroDataBox (via RapidAPI) Integration & 10-Minute LocalStorage Caching System
  */
 
 (function () {
   'use strict';
 
   // Constants
-  const STORAGE_API_KEY = 'airlabs_api_key';
+  const STORAGE_API_KEY = 'tailmark_rapidapi_key';
   const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 
   // DOM Elements
@@ -82,13 +82,13 @@
   function saveApiKey(key) {
     const trimmed = key.trim();
     if (!trimmed) {
-      showAlert('Please enter a valid AirLabs API key.', 'error');
+      showAlert('Please enter a valid RapidAPI key.', 'error');
       return false;
     }
     localStorage.setItem(STORAGE_API_KEY, trimmed);
     currentApiKey = trimmed;
     setupApiKeyUI();
-    showAlert('AirLabs API key saved successfully!', 'info');
+    showAlert('RapidAPI key saved successfully!', 'info');
     return true;
   }
 
@@ -117,18 +117,18 @@
   }
 
   /**
-   * Generates the cache key in format: {FLIGHT_IATA}_{YYYY-MM-DD}
+   * Generates the cache key in format: aerodatabox_{FLIGHT_NUMBER}_{YYYY-MM-DD}
    */
-  function getCacheKey(flightIata) {
-    return `${flightIata.toUpperCase()}_${getTodayDateString()}`;
+  function getCacheKey(flightNumber) {
+    return `aerodatabox_${flightNumber.toUpperCase()}_${getTodayDateString()}`;
   }
 
   /**
    * Look up cached response in localStorage.
    * Returns parsed object if valid and within 10 minutes TTL.
    */
-  function getCachedFlight(flightIata) {
-    const cacheKey = getCacheKey(flightIata);
+  function getCachedFlight(flightNumber) {
+    const cacheKey = getCacheKey(flightNumber);
     const rawData = localStorage.getItem(cacheKey);
 
     if (!rawData) return null;
@@ -167,8 +167,8 @@
   /**
    * Store API response in localStorage with timestamp.
    */
-  function setCachedFlight(flightIata, data) {
-    const cacheKey = getCacheKey(flightIata);
+  function setCachedFlight(flightNumber, data) {
+    const cacheKey = getCacheKey(flightNumber);
     const cacheObj = {
       timestamp: Date.now(),
       data: data
@@ -181,21 +181,34 @@
   }
 
   /* ==========================================================================
-     3. Flight Status Fetching & Normalization
+     3. Flight Status Fetching & Normalization (AeroDataBox)
      ========================================================================== */
 
-  async function fetchFlightStatus(flightIataInput, bypassCache = false) {
+  function selectFlightSegment(data) {
+    if (!data) return null;
+    if (!Array.isArray(data)) {
+      return typeof data === 'object' ? data : null;
+    }
+    if (data.length === 0) return null;
+    const activeLeg = data.find((item) => {
+      const s = (item.status || '').toLowerCase();
+      return s === 'enroute' || s === 'boarding' || s === 'active' || s === 'in-flight' || s === 'departed';
+    });
+    return activeLeg || data[0];
+  }
+
+  async function fetchFlightStatus(flightNumberInput, bypassCache = false) {
     // 1. Input Normalization
-    const flightIata = flightIataInput.trim().toUpperCase().replace(/\s+/g, '');
+    const flightNumber = flightNumberInput.trim().toUpperCase().replace(/\s+/g, '');
     
-    if (!flightIata) {
+    if (!flightNumber) {
       showAlert('Please enter a flight number (e.g. DL1193).', 'warning');
       return;
     }
 
     // 2. Validate API Key Presence
     if (!currentApiKey) {
-      showAlert('API key missing! Please enter your AirLabs API key above to track flights.', 'warning');
+      showAlert('API key missing! Please enter your RapidAPI key above to track flights. You can get a free key at RapidAPI.com.', 'warning');
       apiKeyInput.focus();
       return;
     }
@@ -204,51 +217,61 @@
 
     // 3. Check Local Cache first (unless bypass requested)
     if (!bypassCache) {
-      const cached = getCachedFlight(flightIata);
+      const cached = getCachedFlight(flightNumber);
       if (cached) {
-        console.log(`[Cache Hit] Serving ${flightIata} from localStorage cache. Age: ${cached.ageMinutes}m`);
-        renderFlightResult(cached.data, flightIata, true, cached);
+        console.log(`[Cache Hit] Serving ${flightNumber} from localStorage cache. Age: ${cached.ageMinutes}m`);
+        renderFlightResult(cached.data, flightNumber, true, cached);
         return;
       }
     }
 
-    // 4. Cache miss or forced refresh: Execute API Request
+    // 4. Cache miss or forced refresh: Execute API Request to AeroDataBox via RapidAPI
     setLoadingState(true);
 
     try {
-      const apiUrl = `https://airlabs.co/api/v9/flight?flight_iata=${encodeURIComponent(flightIata)}&api_key=${encodeURIComponent(currentApiKey)}`;
-      const response = await fetch(apiUrl);
-      
+      const apiUrl = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber)}?withAircraftImage=false&withLocation=false&withFlightPlan=false`;
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-host': 'aerodatabox.p.rapidapi.com',
+          'x-rapidapi-key': currentApiKey
+        }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        showAlert('Invalid RapidAPI key or unauthorized access. Please check your RapidAPI key and AeroDataBox subscription on RapidAPI.com.', 'error');
+        resultsContainer.classList.add('hidden');
+        return;
+      }
+
+      if (response.status === 404 || response.status === 204) {
+        showAlert(`No active or scheduled flight record found for flight number "${flightNumber}". Please verify the flight number.`, 'warning');
+        resultsContainer.classList.add('hidden');
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
       }
 
       const json = await response.json();
 
-      // Handle AirLabs API Error response
-      if (json.error) {
-        const errorMsg = json.error.message || json.error.code || 'Flight lookup failed.';
-        showAlert(`AirLabs API Error: ${errorMsg}`, 'error');
-        resultsContainer.classList.add('hidden');
-        return;
-      }
-
-      // Check if response contains valid flight data
-      if (!json.response || Object.keys(json.response).length === 0) {
-        showAlert(`No active or scheduled flight record found for flight number "${flightIata}". Please verify the IATA flight code.`, 'warning');
+      // Check if response contains valid flight data array
+      if (!json || (Array.isArray(json) && json.length === 0)) {
+        showAlert(`No active or scheduled flight record found for flight number "${flightNumber}". Please verify the flight number.`, 'warning');
         resultsContainer.classList.add('hidden');
         return;
       }
 
       // Successful fetch: Store in Local Cache
-      setCachedFlight(flightIata, json);
+      setCachedFlight(flightNumber, json);
       
       // Render Live Result
-      renderFlightResult(json, flightIata, false, null);
+      renderFlightResult(json, flightNumber, false, null);
 
     } catch (err) {
       console.error('Flight status request failed:', err);
-      showAlert(`Network/API Connection Error: ${err.message}. Please check your internet connection or API key.`, 'error');
+      showAlert(`Network/API Connection Error: ${err.message}. Please check your internet connection or verify your RapidAPI key on RapidAPI.com.`, 'error');
       resultsContainer.classList.add('hidden');
     } finally {
       setLoadingState(false);
@@ -295,48 +318,98 @@
 
   function formatTime(timeStr) {
     if (!timeStr) return 'N/A';
-    // Format "YYYY-MM-DD HH:MM" or "HH:MM"
-    const parts = timeStr.split(' ');
-    if (parts.length === 2) {
-      return parts[1]; // Return HH:MM
+    if (timeStr.includes('T')) {
+      const timePart = timeStr.split('T')[1];
+      if (timePart) {
+        return timePart.substring(0, 5); // "HH:MM"
+      }
+    } else if (timeStr.includes(' ')) {
+      const parts = timeStr.split(' ');
+      if (parts.length >= 2) {
+        return parts[1].substring(0, 5);
+      }
     }
     return timeStr;
   }
 
-  function calculateFlightProgress(data) {
-    if (data.percent !== undefined && data.percent !== null) {
-      return Math.min(100, Math.max(0, Math.round(data.percent)));
+  function calculateFlightProgress(item) {
+    if (!item) return 0;
+    const status = (item.status || '').toLowerCase();
+    if (status === 'landed' || status === 'arrived') return 100;
+    if (status === 'scheduled' || status === 'expected' || status === 'cancelled') return 0;
+    if (status === 'enroute' || status === 'boarding' || status === 'departed' || status === 'active' || status === 'in-flight') return 50;
+    return 0;
+  }
+
+  function calculateDelay(item) {
+    if (!item) return 0;
+    const depSched = item.departure?.scheduledTime?.local;
+    const depActual = item.departure?.revisedTime?.local || item.departure?.actualTime?.local;
+    if (depSched && depActual) {
+      const sMs = new Date(depSched).getTime();
+      const aMs = new Date(depActual).getTime();
+      if (!isNaN(sMs) && !isNaN(aMs)) {
+        const diff = Math.round((aMs - sMs) / 60000);
+        if (diff > 0) return diff;
+      }
     }
-    const status = (data.status || '').toLowerCase();
-    if (status === 'landed') return 100;
-    if (status === 'scheduled') return 0;
-    if (status === 'active' || status === 'en-route') return 50;
+    const arrSched = item.arrival?.scheduledTime?.local;
+    const arrActual = item.arrival?.revisedTime?.local || item.arrival?.predictedTime?.local || item.arrival?.actualTime?.local;
+    if (arrSched && arrActual) {
+      const sMs = new Date(arrSched).getTime();
+      const aMs = new Date(arrActual).getTime();
+      if (!isNaN(sMs) && !isNaN(aMs)) {
+        const diff = Math.round((aMs - sMs) / 60000);
+        if (diff > 0) return diff;
+      }
+    }
     return 0;
   }
 
   function getStatusStyle(statusRaw, delayMins) {
     const s = (statusRaw || '').toLowerCase();
-    if (s === 'active' || s === 'en-route') {
-      return { class: 'status-active', label: 'EN ROUTE' };
-    } else if (s === 'landed') {
+    if (s === 'enroute' || s === 'boarding' || s === 'active' || s === 'en-route' || s === 'departed' || s === 'in-flight') {
+      return { class: 'status-active', label: statusRaw ? statusRaw.toUpperCase() : 'EN ROUTE' };
+    } else if (s === 'landed' || s === 'arrived') {
       return { class: 'status-landed', label: 'LANDED' };
-    } else if (s === 'scheduled') {
-      return { class: 'status-scheduled', label: 'SCHEDULED' };
-    } else if (s === 'cancelled') {
+    } else if (s === 'scheduled' || s === 'expected') {
+      return { class: 'status-scheduled', label: statusRaw ? statusRaw.toUpperCase() : 'SCHEDULED' };
+    } else if (s === 'cancelled' || s === 'canceled') {
       return { class: 'status-cancelled', label: 'CANCELLED' };
     } else if (delayMins > 0 || s === 'delayed') {
       return { class: 'status-delayed', label: 'DELAYED' };
     }
-    return { class: 'status-scheduled', label: s.toUpperCase() || 'UNKNOWN' };
+    return { class: 'status-scheduled', label: statusRaw ? statusRaw.toUpperCase() : 'UNKNOWN' };
   }
 
-  function renderFlightResult(apiResponse, flightIata, isCached, cacheInfo) {
-    const flight = apiResponse.response;
-    if (!flight) return;
+  function renderFlightResult(apiResponse, flightNumber, isCached, cacheInfo) {
+    const item = selectFlightSegment(apiResponse);
+    if (!item) return;
 
-    const delayMins = flight.delayed || flight.arr_delay || flight.dep_delay || 0;
-    const statusMeta = getStatusStyle(flight.status, delayMins);
-    const progressPct = calculateFlightProgress(flight);
+    const delayMins = calculateDelay(item);
+    const statusMeta = getStatusStyle(item.status, delayMins);
+    const progressPct = calculateFlightProgress(item);
+
+    const airlineName = item.airline?.name || 'Airline';
+    const flightNum = item.number || flightNumber;
+    const aircraftModel = item.aircraft?.model || 'N/A';
+
+    // Departure details
+    const depIata = item.departure?.airport?.iata || 'DEP';
+    const depCity = item.departure?.airport?.municipalityName || item.departure?.airport?.name || 'Origin';
+    const depSchedTime = item.departure?.scheduledTime?.local;
+    const depRevActTime = item.departure?.revisedTime?.local || item.departure?.actualTime?.local;
+    const depTerminal = item.departure?.terminal;
+    const depGate = item.departure?.gate;
+
+    // Arrival details
+    const arrIata = item.arrival?.airport?.iata || 'ARR';
+    const arrCity = item.arrival?.airport?.municipalityName || item.arrival?.airport?.name || 'Destination';
+    const arrSchedTime = item.arrival?.scheduledTime?.local;
+    const arrRevPredTime = item.arrival?.revisedTime?.local || item.arrival?.predictedTime?.local;
+    const arrTerminal = item.arrival?.terminal;
+    const arrGate = item.arrival?.gate;
+    const arrBaggage = item.arrival?.baggageBelt;
 
     // Cache banner markup
     let cacheBannerHtml = '';
@@ -347,7 +420,7 @@
           <div>
             ⚡ <strong>Served from local browser cache</strong> (Fetched ${ageText} • Expires in ~${cacheInfo.remainingMinutes} min)
           </div>
-          <button type="button" class="btn-force-refresh" id="forceRefreshBtn" data-flight="${flightIata}">
+          <button type="button" class="btn-force-refresh" id="forceRefreshBtn" data-flight="${flightNumber}">
             Fetch Fresh Data &circlearrowright;
           </button>
         </div>
@@ -356,7 +429,7 @@
       cacheBannerHtml = `
         <div class="cache-info-banner is-live">
           <div>
-            🟢 <strong>Live data fetched directly from AirLabs API</strong> (Cached for 10 minutes)
+            🟢 <strong>Live data fetched directly from AeroDataBox API</strong> (Cached for 10 minutes)
           </div>
         </div>
       `;
@@ -367,8 +440,8 @@
         <!-- Card Header -->
         <div class="flight-header-row">
           <div class="airline-flight-info">
-            <span class="airline-name">${flight.airline_name || flight.airline_iata || 'Airline'} &bull; ${flight.flight_iata || flightIata}</span>
-            <h1 class="flight-number-lg">${flight.flight_iata || flightIata}</h1>
+            <span class="airline-name">${airlineName} &bull; ${flightNum}</span>
+            <h1 class="flight-number-lg">${flightNum}</h1>
           </div>
           <div class="status-cache-pills">
             <span class="status-pill ${statusMeta.class}">
@@ -386,15 +459,15 @@
         <div class="route-timeline">
           <!-- Departure -->
           <div class="endpoint endpoint-dep">
-            <div class="iata-code">${flight.dep_iata || 'DEP'}</div>
-            <div class="city-name" title="${flight.dep_name || ''}">${flight.dep_city || flight.dep_name || 'Origin'}</div>
+            <div class="iata-code">${depIata}</div>
+            <div class="city-name" title="${depCity}">${depCity}</div>
             <div class="time-box">
-              <span class="time-main">${formatTime(flight.dep_actual || flight.dep_estimated || flight.dep_time)}</span>
-              <span class="time-sub">Sched: ${formatTime(flight.dep_time)}</span>
+              <span class="time-main">${formatTime(depRevActTime || depSchedTime)}</span>
+              <span class="time-sub">Sched: ${formatTime(depSchedTime)}</span>
             </div>
             <div class="terminal-gate">
-              ${flight.dep_terminal ? 'Term ' + flight.dep_terminal : ''} 
-              ${flight.dep_gate ? 'Gate ' + flight.dep_gate : ''}
+              ${depTerminal ? 'Term ' + depTerminal : ''} 
+              ${depGate ? 'Gate ' + depGate : ''}
             </div>
           </div>
 
@@ -410,22 +483,22 @@
               </div>
             </div>
             <span class="duration-text">
-              ${flight.duration ? Math.floor(flight.duration / 60) + 'h ' + (flight.duration % 60) + 'm est.' : progressPct + '% completed'}
+              ${progressPct}% completed
             </span>
           </div>
 
           <!-- Arrival -->
           <div class="endpoint endpoint-arr">
-            <div class="iata-code">${flight.arr_iata || 'ARR'}</div>
-            <div class="city-name" title="${flight.arr_name || ''}">${flight.arr_city || flight.arr_name || 'Destination'}</div>
+            <div class="iata-code">${arrIata}</div>
+            <div class="city-name" title="${arrCity}">${arrCity}</div>
             <div class="time-box">
-              <span class="time-main">${formatTime(flight.arr_estimated || flight.arr_actual || flight.arr_time)}</span>
-              <span class="time-sub">Sched: ${formatTime(flight.arr_time)}</span>
+              <span class="time-main">${formatTime(arrRevPredTime || arrSchedTime)}</span>
+              <span class="time-sub">Sched: ${formatTime(arrSchedTime)}</span>
             </div>
             <div class="terminal-gate">
-              ${flight.arr_terminal ? 'Term ' + flight.arr_terminal : ''} 
-              ${flight.arr_gate ? 'Gate ' + flight.arr_gate : ''}
-              ${flight.arr_baggage ? ' &bull; Bag ' + flight.arr_baggage : ''}
+              ${arrTerminal ? 'Term ' + arrTerminal : ''} 
+              ${arrGate ? 'Gate ' + arrGate : ''}
+              ${arrBaggage ? ' &bull; Bag ' + arrBaggage : ''}
             </div>
           </div>
         </div>
@@ -445,11 +518,11 @@
               <span class="metric-value ${delayMins > 0 ? 'metric-delayed' : 'metric-ontime'}">
                 ${delayMins > 0 ? '+' + delayMins + ' min delay' : 'On Time'}
               </span>
-              <span class="metric-subtext">${flight.dep_delay ? 'Dep: +' + flight.dep_delay + 'm' : ''} ${flight.arr_delay ? 'Arr: +' + flight.arr_delay + 'm' : ''}</span>
+              <span class="metric-subtext">${item.status || 'Status Active'}</span>
             </div>
           </div>
 
-          <!-- Aircraft Type -->
+          <!-- Aircraft Model -->
           <div class="metric-card">
             <div class="metric-icon-bg">
               <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -457,13 +530,13 @@
               </svg>
             </div>
             <div class="metric-content">
-              <span class="metric-label">Aircraft Type</span>
-              <span class="metric-value">${flight.aircraft_icao || flight.aircraft_code || 'N/A'}</span>
-              <span class="metric-subtext">${flight.reg_number ? 'Tail: ' + flight.reg_number : 'Reg unavailable'}</span>
+              <span class="metric-label">Aircraft Model</span>
+              <span class="metric-value">${aircraftModel}</span>
+              <span class="metric-subtext">${item.aircraft?.reg ? 'Tail: ' + item.aircraft.reg : 'Aircraft Info'}</span>
             </div>
           </div>
 
-          <!-- Speed & Altitude -->
+          <!-- Departure Details -->
           <div class="metric-card">
             <div class="metric-icon-bg">
               <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -471,13 +544,13 @@
               </svg>
             </div>
             <div class="metric-content">
-              <span class="metric-label">Speed & Altitude</span>
-              <span class="metric-value">${flight.speed ? flight.speed + ' kts' : 'N/A'}</span>
-              <span class="metric-subtext">${flight.alt ? 'Alt: ' + Number(flight.alt).toLocaleString() + ' ft' : 'On Ground'}</span>
+              <span class="metric-label">Departure Terminal & Gate</span>
+              <span class="metric-value">${depTerminal ? 'Term ' + depTerminal : 'Term N/A'}, ${depGate ? 'Gate ' + depGate : 'Gate N/A'}</span>
+              <span class="metric-subtext">Sched: ${formatTime(depSchedTime)}</span>
             </div>
           </div>
 
-          <!-- Position Coordinates -->
+          <!-- Arrival Details -->
           <div class="metric-card">
             <div class="metric-icon-bg">
               <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -486,13 +559,9 @@
               </svg>
             </div>
             <div class="metric-content">
-              <span class="metric-label">Live Position</span>
-              <span class="metric-value">
-                ${flight.lat && flight.lng ? flight.lat.toFixed(2) + '°, ' + flight.lng.toFixed(2) + '°' : 'N/A'}
-              </span>
-              <span class="metric-subtext">
-                ${flight.lat && flight.lng ? `<a href="https://maps.google.com/?q=${flight.lat},${flight.lng}" target="_blank" rel="noopener noreferrer" style="color: var(--primary-blue)">View on Map &rarr;</a>` : 'Radar tracking pending'}
-              </span>
+              <span class="metric-label">Arrival Gate & Baggage</span>
+              <span class="metric-value">${arrGate ? 'Gate ' + arrGate : 'Gate N/A'}</span>
+              <span class="metric-subtext">${arrBaggage ? 'Baggage Belt: ' + arrBaggage : 'Baggage: N/A'}</span>
             </div>
           </div>
         </div>
@@ -500,7 +569,7 @@
         <!-- Technical Payload Inspector (Accordion) -->
         <details class="tech-details-details">
           <summary class="tech-details-summary">
-            <span>Developer View: AirLabs Raw API JSON Response</span>
+            <span>Developer View: AeroDataBox Raw API JSON Response</span>
             <span>&blackdown;</span>
           </summary>
           <pre class="raw-json-block">${JSON.stringify(apiResponse, null, 2)}</pre>
@@ -554,7 +623,7 @@
 
     // Clear API Key Button
     clearApiKeyBtn.addEventListener('click', () => {
-      if (confirm('Are you sure you want to clear your stored AirLabs API key?')) {
+      if (confirm('Are you sure you want to clear your stored RapidAPI key?')) {
         clearApiKey();
       }
     });
