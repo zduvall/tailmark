@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Real-time flight status lookup web application powered by AirLabs API with client-side caching."
+    />
+    <title>Tailmark - Real-Time Flight Status Lookup</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Navigation / Header -->
+      <header class="app-header">
+        <div class="logo-container">
+          <svg
+            class="logo-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path
+              d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"
+            />
+          </svg>
+          <span class="logo-text">Tailmark</span>
+          <span class="badge badge-poc">AirLabs API Tracker</span>
+        </div>
+        <div id="headerApiKeyStatus" class="header-api-status">
+          <!-- Injected via JS -->
+        </div>
+      </header>
+
+      <main class="main-content">
+        <!-- API Key Setup Banner / Card -->
+        <section id="apiKeySection" class="card api-key-card">
+          <div class="card-header">
+            <div class="icon-title">
+              <svg
+                class="icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+                ></path>
+              </svg>
+              <h2>AirLabs API Key Configuration (BYOK)</h2>
+            </div>
+            <span class="key-badge" id="keyConfigStatus">Not Configured</span>
+          </div>
+
+          <p class="section-desc">
+            Enter your free AirLabs API key to start tracking flights. Your key
+            is stored locally in your browser (<code>localStorage</code>) and is
+            never transmitted to any third-party server.
+          </p>
+
+          <!-- Key Input View -->
+          <form id="apiKeyForm" class="api-key-form">
+            <div class="input-group">
+              <label for="apiKeyInput" class="visually-hidden"
+                >AirLabs API Key</label
+              >
+              <input
+                type="password"
+                id="apiKeyInput"
+                placeholder="e.g. 12345678-abcd-1234-abcd-123456789abc"
+                autocomplete="off"
+                required
+              />
+              <button
+                type="button"
+                id="toggleKeyVisibilityBtn"
+                class="btn btn-icon"
+                title="Toggle visibility"
+              >
+                <svg
+                  id="eyeIcon"
+                  class="icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+              <button type="submit" class="btn btn-primary">
+                Save API Key
+              </button>
+            </div>
+            <div class="api-key-help">
+              <span>Don't have an API key?</span>
+              <a
+                href="https://airlabs.co/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link-external"
+              >
+                Get free API key at AirLabs.co &rarr;
+              </a>
+            </div>
+          </form>
+
+          <!-- Active Key View (Shown when key is set) -->
+          <div id="apiKeyActiveView" class="api-key-active-view hidden">
+            <div class="key-display">
+              <span class="key-label">Active API Key:</span>
+              <code id="maskedKeyDisplay" class="masked-key"
+                >••••••••••••••••</code
+              >
+            </div>
+            <div class="key-actions">
+              <button id="editApiKeyBtn" class="btn btn-outline btn-sm">
+                Change Key
+              </button>
+              <button id="clearApiKeyBtn" class="btn btn-danger-outline btn-sm">
+                Clear Key
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Flight Search Card -->
+        <section class="card search-card">
+          <div class="card-header">
+            <div class="icon-title">
+              <svg
+                class="icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <h2>Track Flight Status</h2>
+            </div>
+          </div>
+
+          <form id="flightSearchForm" class="search-form">
+            <div class="search-input-wrapper">
+              <div class="input-with-icon">
+                <svg
+                  class="input-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  id="flightInput"
+                  placeholder="Enter Flight Number (e.g. DL1193, AA100, UA2402)"
+                  maxlength="10"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                id="searchBtn"
+                class="btn btn-primary btn-search"
+              >
+                <span id="searchBtnText">Track Flight</span>
+                <div id="searchSpinner" class="spinner hidden"></div>
+              </button>
+            </div>
+
+            <div class="sample-flights">
+              <span class="sample-label">Quick test:</span>
+              <button type="button" class="chip-sample" data-flight="DL1193">
+                DL1193
+              </button>
+              <button type="button" class="chip-sample" data-flight="AA100">
+                AA100
+              </button>
+              <button type="button" class="chip-sample" data-flight="UA2402">
+                UA2402
+              </button>
+              <button type="button" class="chip-sample" data-flight="BA178">
+                BA178
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Alert / Notification Banner Container -->
+        <div id="alertContainer" class="alert-container"></div>
+
+        <!-- Flight Results Display Container -->
+        <div id="resultsContainer" class="results-container hidden">
+          <!-- Injected via JavaScript -->
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <p>
+          Tailmark Proof of Concept &bull; Powered by
+          <a href="https://airlabs.co" target="_blank" rel="noopener noreferrer"
+            >AirLabs API</a
+          >
+          &bull; Browser Client Caching (10 min TTL)
+        </p>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
