@@ -181,20 +181,130 @@
   }
 
   /* ==========================================================================
-     3. Flight Status Fetching & Normalization (AeroDataBox)
+     3. Flight Status Fetching & Smart Default Segment Selection
      ========================================================================== */
 
-  function selectFlightSegment(data) {
-    if (!data) return null;
-    if (!Array.isArray(data)) {
-      return typeof data === 'object' ? data : null;
-    }
-    if (data.length === 0) return null;
-    const activeLeg = data.find((item) => {
-      const s = (item.status || '').toLowerCase();
-      return s === 'enroute' || s === 'boarding' || s === 'active' || s === 'in-flight' || s === 'departed';
+  /**
+   * Smart Default Tab Selection logic:
+   * Rule 1. Active Flight: EnRoute, Boarding, CheckIn, Active, in-flight.
+   * Rule 2. Recently Landed (< 1 hour): Landed / Arrived within last 60 minutes relative to current time.
+   * Rule 3. Next Upcoming Flight: Expected / Scheduled or earliest departure in future.
+   * Rule 4. Fallback: Segment whose departure time is closest to current timestamp.
+   */
+  function getSmartDefaultSegmentIndex(data) {
+    if (!Array.isArray(data) || data.length === 0) return 0;
+    const now = Date.now();
+
+    // Rule 1: Active Flight
+    const activeStates = ['enroute', 'boarding', 'checkin', 'active', 'in-flight'];
+    const activeIdx = data.findIndex((item) => {
+      const s = (item.status || '').toLowerCase().replace(/[\s\-_]/g, '');
+      return activeStates.includes(s);
     });
-    return activeLeg || data[0];
+    if (activeIdx !== -1) return activeIdx;
+
+    // Rule 2: Recently Landed (< 1 hour = 3600000 ms)
+    const landedStates = ['landed', 'arrived'];
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      const s = (item.status || '').toLowerCase().replace(/[\s\-_]/g, '');
+      if (landedStates.includes(s)) {
+        const arrTimeStr = item.arrival?.actualTime?.local ||
+                           item.arrival?.revisedTime?.local ||
+                           item.arrival?.predictedTime?.local ||
+                           item.arrival?.scheduledTime?.local;
+        if (arrTimeStr) {
+          const arrMs = new Date(arrTimeStr).getTime();
+          if (!isNaN(arrMs)) {
+            const timeSinceLanded = now - arrMs;
+            if (timeSinceLanded >= 0 && timeSinceLanded <= 60 * 60 * 1000) {
+              return i;
+            }
+          }
+        }
+      }
+    }
+
+    // Rule 3: Next Upcoming Flight (earliest departure in future)
+    let earliestUpcomingIdx = -1;
+    let minFutureDiff = Infinity;
+
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      const s = (item.status || '').toLowerCase().replace(/[\s\-_]/g, '');
+      const depTimeStr = item.departure?.scheduledTime?.local ||
+                         item.departure?.revisedTime?.local ||
+                         item.departure?.predictedTime?.local ||
+                         item.departure?.actualTime?.local;
+      let isUpcoming = (s === 'scheduled' || s === 'expected');
+      if (depTimeStr) {
+        const depMs = new Date(depTimeStr).getTime();
+        if (!isNaN(depMs)) {
+          if (depMs >= now) {
+            isUpcoming = true;
+          }
+          if (isUpcoming && (depMs - now) >= -300000) { // Future or within 5m past
+            const diff = Math.abs(depMs - now);
+            if (diff < minFutureDiff) {
+              minFutureDiff = diff;
+              earliestUpcomingIdx = i;
+            }
+          }
+        }
+      } else if (isUpcoming && earliestUpcomingIdx === -1) {
+        earliestUpcomingIdx = i;
+      }
+    }
+
+    if (earliestUpcomingIdx !== -1) return earliestUpcomingIdx;
+
+    // Rule 4: Fallback to segment with departure closest to current time
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      const depTimeStr = item.departure?.scheduledTime?.local ||
+                         item.departure?.actualTime?.local;
+      if (depTimeStr) {
+        const depMs = new Date(depTimeStr).getTime();
+        if (!isNaN(depMs)) {
+          const diff = Math.abs(depMs - now);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = i;
+          }
+        }
+      }
+    }
+
+    return closestIdx;
+  }
+
+  /**
+   * Helper to format tab label for segment date selector (e.g., "Mon, Aug 24 (JFK-LAX)")
+   */
+  function formatSegmentTabLabel(item, index) {
+    const depTimeStr = item.departure?.scheduledTime?.local ||
+                       item.departure?.actualTime?.local ||
+                       item.departure?.revisedTime?.local;
+    let dateStr = `Leg ${index + 1}`;
+    if (depTimeStr) {
+      try {
+        const d = new Date(depTimeStr);
+        if (!isNaN(d.getTime())) {
+          const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+          const month = d.toLocaleDateString('en-US', { month: 'short' });
+          const day = d.getDate();
+          dateStr = `${weekday}, ${month} ${day}`;
+        }
+      } catch (e) {}
+    }
+
+    const depIata = item.departure?.airport?.iata || '';
+    const arrIata = item.arrival?.airport?.iata || '';
+    const route = (depIata && arrIata) ? ` (${depIata}-${arrIata})` : '';
+
+    return `${dateStr}${route}`;
   }
 
   async function fetchFlightStatus(flightNumberInput, bypassCache = false) {
@@ -225,7 +335,7 @@
       }
     }
 
-    // 4. Cache miss or forced refresh: Execute API Request to AeroDataBox via RapidAPI
+    // 4. Cache miss or forced refresh: Execute API Request
     setLoadingState(true);
 
     try {
@@ -279,7 +389,7 @@
   }
 
   /* ==========================================================================
-     4. UI Rendering Functions
+     4. UI Rendering & Time Formatting Functions
      ========================================================================== */
 
   function setLoadingState(isLoading) {
@@ -316,12 +426,15 @@
     alertContainer.innerHTML = '';
   }
 
+  /**
+   * Helper to format time strings (ISO or space separated) as HH:mm
+   */
   function formatTime(timeStr) {
-    if (!timeStr) return 'N/A';
+    if (!timeStr) return '—';
     if (timeStr.includes('T')) {
       const timePart = timeStr.split('T')[1];
       if (timePart) {
-        return timePart.substring(0, 5); // "HH:MM"
+        return timePart.substring(0, 5); // "HH:mm"
       }
     } else if (timeStr.includes(' ')) {
       const parts = timeStr.split(' ');
@@ -329,7 +442,60 @@
         return parts[1].substring(0, 5);
       }
     }
-    return timeStr;
+    return timeStr.length >= 5 ? timeStr.substring(0, 5) : timeStr;
+  }
+
+  /**
+   * Extracts primary estimated time (actualTime > revisedTime > predictedTime > scheduledTime)
+   * and compares with baseline scheduledTime.
+   */
+  function extractTimeDetails(endpointObj) {
+    if (!endpointObj) {
+      return { primaryFormatted: '—', schedFormatted: '—', isDifferent: false };
+    }
+
+    const schedRaw = endpointObj.scheduledTime?.local;
+    const schedFormatted = formatTime(schedRaw);
+
+    const primaryRaw = endpointObj.actualTime?.local ||
+                       endpointObj.revisedTime?.local ||
+                       endpointObj.predictedTime?.local ||
+                       endpointObj.runwayTime?.local ||
+                       schedRaw;
+
+    const primaryFormatted = formatTime(primaryRaw);
+
+    const isDifferent = (
+      primaryFormatted !== '—' &&
+      schedFormatted !== '—' &&
+      primaryFormatted !== schedFormatted
+    );
+
+    return {
+      primaryFormatted,
+      schedFormatted,
+      isDifferent
+    };
+  }
+
+  /**
+   * Formats terminal and gate side-by-side cleanly.
+   * If a field is missing, displays "—" for consistent layout structure.
+   */
+  function formatTerminalGatePair(terminal, gate) {
+    const termDisplay = terminal ? `Term ${terminal}` : 'Term —';
+    const gateDisplay = gate ? `Gate ${gate}` : 'Gate —';
+    return `${termDisplay} • ${gateDisplay}`;
+  }
+
+  /**
+   * Formats arrival terminal, gate, and baggage belt cleanly.
+   */
+  function formatArrivalTerminalGateBag(terminal, gate, baggageBelt) {
+    const termDisplay = terminal ? `Term ${terminal}` : 'Term —';
+    const gateDisplay = gate ? `Gate ${gate}` : 'Gate —';
+    const bagDisplay = baggageBelt ? `Bag ${baggageBelt}` : null;
+    return bagDisplay ? `${termDisplay} • ${gateDisplay} • ${bagDisplay}` : `${termDisplay} • ${gateDisplay}`;
   }
 
   function calculateFlightProgress(item) {
@@ -344,22 +510,28 @@
   function calculateDelay(item) {
     if (!item) return 0;
     const depSched = item.departure?.scheduledTime?.local;
-    const depActual = item.departure?.revisedTime?.local || item.departure?.actualTime?.local;
-    if (depSched && depActual) {
+    const depPrimary = item.departure?.actualTime?.local ||
+                       item.departure?.revisedTime?.local ||
+                       item.departure?.predictedTime?.local ||
+                       item.departure?.runwayTime?.local;
+    if (depSched && depPrimary) {
       const sMs = new Date(depSched).getTime();
-      const aMs = new Date(depActual).getTime();
-      if (!isNaN(sMs) && !isNaN(aMs)) {
-        const diff = Math.round((aMs - sMs) / 60000);
+      const pMs = new Date(depPrimary).getTime();
+      if (!isNaN(sMs) && !isNaN(pMs)) {
+        const diff = Math.round((pMs - sMs) / 60000);
         if (diff > 0) return diff;
       }
     }
     const arrSched = item.arrival?.scheduledTime?.local;
-    const arrActual = item.arrival?.revisedTime?.local || item.arrival?.predictedTime?.local || item.arrival?.actualTime?.local;
-    if (arrSched && arrActual) {
+    const arrPrimary = item.arrival?.actualTime?.local ||
+                       item.arrival?.revisedTime?.local ||
+                       item.arrival?.predictedTime?.local ||
+                       item.arrival?.runwayTime?.local;
+    if (arrSched && arrPrimary) {
       const sMs = new Date(arrSched).getTime();
-      const aMs = new Date(arrActual).getTime();
-      if (!isNaN(sMs) && !isNaN(aMs)) {
-        const diff = Math.round((aMs - sMs) / 60000);
+      const pMs = new Date(arrPrimary).getTime();
+      if (!isNaN(sMs) && !isNaN(pMs)) {
+        const diff = Math.round((pMs - sMs) / 60000);
         if (diff > 0) return diff;
       }
     }
@@ -382,8 +554,21 @@
     return { class: 'status-scheduled', label: statusRaw ? statusRaw.toUpperCase() : 'UNKNOWN' };
   }
 
-  function renderFlightResult(apiResponse, flightNumber, isCached, cacheInfo) {
-    const item = selectFlightSegment(apiResponse);
+  function renderFlightResult(apiResponse, flightNumber, isCached, cacheInfo, selectedSegmentIndex = null) {
+    const isArray = Array.isArray(apiResponse);
+    const totalSegments = isArray ? apiResponse.length : 1;
+    
+    // Determine active segment index
+    let targetIndex = 0;
+    if (isArray && totalSegments > 0) {
+      if (selectedSegmentIndex !== null && selectedSegmentIndex !== undefined && selectedSegmentIndex >= 0 && selectedSegmentIndex < totalSegments) {
+        targetIndex = selectedSegmentIndex;
+      } else {
+        targetIndex = getSmartDefaultSegmentIndex(apiResponse);
+      }
+    }
+
+    const item = isArray ? apiResponse[targetIndex] : apiResponse;
     if (!item) return;
 
     const delayMins = calculateDelay(item);
@@ -392,24 +577,50 @@
 
     const airlineName = item.airline?.name || 'Airline';
     const flightNum = item.number || flightNumber;
-    const aircraftModel = item.aircraft?.model || 'N/A';
+    const aircraftModel = item.aircraft?.model || '—';
 
     // Departure details
     const depIata = item.departure?.airport?.iata || 'DEP';
     const depCity = item.departure?.airport?.municipalityName || item.departure?.airport?.name || 'Origin';
-    const depSchedTime = item.departure?.scheduledTime?.local;
-    const depRevActTime = item.departure?.revisedTime?.local || item.departure?.actualTime?.local;
-    const depTerminal = item.departure?.terminal;
-    const depGate = item.departure?.gate;
+    const depTimes = extractTimeDetails(item.departure);
+    const depGateInfo = formatTerminalGatePair(item.departure?.terminal, item.departure?.gate);
+
+    const depSubtextHtml = depTimes.isDifferent
+      ? `Sched: <s>${depTimes.schedFormatted}</s> <span class="time-est-highlight">${depTimes.primaryFormatted}</span>`
+      : `Sched: ${depTimes.schedFormatted}`;
 
     // Arrival details
     const arrIata = item.arrival?.airport?.iata || 'ARR';
     const arrCity = item.arrival?.airport?.municipalityName || item.arrival?.airport?.name || 'Destination';
-    const arrSchedTime = item.arrival?.scheduledTime?.local;
-    const arrRevPredTime = item.arrival?.revisedTime?.local || item.arrival?.predictedTime?.local;
-    const arrTerminal = item.arrival?.terminal;
-    const arrGate = item.arrival?.gate;
-    const arrBaggage = item.arrival?.baggageBelt;
+    const arrTimes = extractTimeDetails(item.arrival);
+    const arrGateInfo = formatArrivalTerminalGateBag(item.arrival?.terminal, item.arrival?.gate, item.arrival?.baggageBelt);
+
+    const arrSubtextHtml = arrTimes.isDifferent
+      ? `Sched: <s>${arrTimes.schedFormatted}</s> <span class="time-est-highlight">${arrTimes.primaryFormatted}</span>`
+      : `Sched: ${arrTimes.schedFormatted}`;
+
+    // Render Segment Selector Tabs if multiple segments exist
+    let segmentTabsHtml = '';
+    if (isArray && totalSegments > 1) {
+      const tabButtonsHtml = apiResponse.map((seg, idx) => {
+        const label = formatSegmentTabLabel(seg, idx);
+        const isActive = (idx === targetIndex);
+        const s = (seg.status || '').toLowerCase();
+        const isLiveActive = (s === 'enroute' || s === 'boarding' || s === 'active' || s === 'in-flight');
+        return `
+          <button type="button" class="segment-tab-btn ${isActive ? 'active' : ''}" data-index="${idx}">
+            <span class="segment-status-dot ${isLiveActive ? 'dot-active' : ''}"></span>
+            <span>${label}</span>
+          </button>
+        `;
+      }).join('');
+
+      segmentTabsHtml = `
+        <div class="segment-tabs-container">
+          ${tabButtonsHtml}
+        </div>
+      `;
+    }
 
     // Cache banner markup
     let cacheBannerHtml = '';
@@ -421,7 +632,7 @@
             ⚡ <strong>Served from local browser cache</strong> (Fetched ${ageText} • Expires in ~${cacheInfo.remainingMinutes} min)
           </div>
           <button type="button" class="btn-force-refresh" id="forceRefreshBtn" data-flight="${flightNumber}">
-            Fetch Fresh Data &circlearrowright;
+            Fetch Fresh Data ↻
           </button>
         </div>
       `;
@@ -436,11 +647,13 @@
     }
 
     const html = `
+      ${segmentTabsHtml}
+
       <div class="flight-card">
         <!-- Card Header -->
         <div class="flight-header-row">
           <div class="airline-flight-info">
-            <span class="airline-name">${airlineName} &bull; ${flightNum}</span>
+            <span class="airline-name">${airlineName} • ${flightNum}</span>
             <h1 class="flight-number-lg">${flightNum}</h1>
           </div>
           <div class="status-cache-pills">
@@ -462,12 +675,11 @@
             <div class="iata-code">${depIata}</div>
             <div class="city-name" title="${depCity}">${depCity}</div>
             <div class="time-box">
-              <span class="time-main">${formatTime(depRevActTime || depSchedTime)}</span>
-              <span class="time-sub">Sched: ${formatTime(depSchedTime)}</span>
+              <span class="time-main">${depTimes.primaryFormatted}</span>
+              <span class="time-sub">${depSubtextHtml}</span>
             </div>
             <div class="terminal-gate">
-              ${depTerminal ? 'Term ' + depTerminal : ''} 
-              ${depGate ? 'Gate ' + depGate : ''}
+              ${depGateInfo}
             </div>
           </div>
 
@@ -492,13 +704,11 @@
             <div class="iata-code">${arrIata}</div>
             <div class="city-name" title="${arrCity}">${arrCity}</div>
             <div class="time-box">
-              <span class="time-main">${formatTime(arrRevPredTime || arrSchedTime)}</span>
-              <span class="time-sub">Sched: ${formatTime(arrSchedTime)}</span>
+              <span class="time-main">${arrTimes.primaryFormatted}</span>
+              <span class="time-sub">${arrSubtextHtml}</span>
             </div>
             <div class="terminal-gate">
-              ${arrTerminal ? 'Term ' + arrTerminal : ''} 
-              ${arrGate ? 'Gate ' + arrGate : ''}
-              ${arrBaggage ? ' &bull; Bag ' + arrBaggage : ''}
+              ${arrGateInfo}
             </div>
           </div>
         </div>
@@ -545,8 +755,8 @@
             </div>
             <div class="metric-content">
               <span class="metric-label">Departure Terminal & Gate</span>
-              <span class="metric-value">${depTerminal ? 'Term ' + depTerminal : 'Term N/A'}, ${depGate ? 'Gate ' + depGate : 'Gate N/A'}</span>
-              <span class="metric-subtext">Sched: ${formatTime(depSchedTime)}</span>
+              <span class="metric-value">${depGateInfo}</span>
+              <span class="metric-subtext">${depTimes.isDifferent ? 'Sched: ' + depTimes.schedFormatted : 'Scheduled On-Time'}</span>
             </div>
           </div>
 
@@ -560,8 +770,8 @@
             </div>
             <div class="metric-content">
               <span class="metric-label">Arrival Gate & Baggage</span>
-              <span class="metric-value">${arrGate ? 'Gate ' + arrGate : 'Gate N/A'}</span>
-              <span class="metric-subtext">${arrBaggage ? 'Baggage Belt: ' + arrBaggage : 'Baggage: N/A'}</span>
+              <span class="metric-value">${arrGateInfo}</span>
+              <span class="metric-subtext">${arrTimes.isDifferent ? 'Sched: ' + arrTimes.schedFormatted : 'Scheduled On-Time'}</span>
             </div>
           </div>
         </div>
@@ -570,7 +780,7 @@
         <details class="tech-details-details">
           <summary class="tech-details-summary">
             <span>Developer View: AeroDataBox Raw API JSON Response</span>
-            <span>&blackdown;</span>
+            <span>▼</span>
           </summary>
           <pre class="raw-json-block">${JSON.stringify(apiResponse, null, 2)}</pre>
         </details>
@@ -579,6 +789,14 @@
 
     resultsContainer.innerHTML = html;
     resultsContainer.classList.remove('hidden');
+
+    // Attach event listeners for Segment Tab buttons
+    document.querySelectorAll('.segment-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const clickedIdx = parseInt(e.currentTarget.dataset.index, 10);
+        renderFlightResult(apiResponse, flightNumber, isCached, cacheInfo, clickedIdx);
+      });
+    });
 
     // Attach event listener for Force Refresh button if rendered
     const forceRefreshBtn = document.getElementById('forceRefreshBtn');

@@ -16,12 +16,17 @@ Tailmark is a lightweight, responsive, single-page web application for looking u
    - Automatically normalizes inputs (trims whitespace, converts to uppercase).
    - Displays live flight progress bar, status badges (`EnRoute`, `Expected`, `Landed`, `Scheduled`, `Cancelled`), departure and arrival airport codes, cities, scheduled and actual/revised times, terminals, gates, baggage belts, and aircraft model.
 
-3. **Client-Side Caching (10-Minute TTL):**
+3. **Multi-Day Segment Tabs & Smart Selection:**
+   - When AeroDataBox returns multiple flight legs across 24–48 hours, renders a horizontal tab bar (e.g. `Mon, Aug 24`, `Tue, Aug 25`).
+   - Automatically auto-selects the default active segment based on priority rules (Active `EnRoute`/`Boarding`, Recently Landed `< 1 hr`, or Next Upcoming flight).
+   - Allows immediate tab switching without triggering new API calls.
+
+4. **Client-Side Caching (10-Minute TTL):**
    - Prevents redundant network requests to RapidAPI by caching API responses in browser `localStorage`.
    - Served instantly if requested within 10 minutes of the previous lookup.
    - Clear visual indicators (⚡ **Cached Result** vs 🟢 **Live Request**) with an optional "Fetch Fresh Data" bypass button.
 
-4. **Modern Raw CSS Aesthetics:**
+5. **Modern Raw CSS Aesthetics:**
    - Built with modern HTML5 and CSS3 (CSS Custom Properties, Flexbox & CSS Grid, glassmorphism card styling, responsive layouts, micro-animations, accessible color hierarchy). No heavyweight frameworks required.
 
 ---

@@ -737,6 +737,17 @@ body {
   color: var(--text-muted);
 }
 
+.time-sub s {
+  text-decoration: line-through;
+  opacity: 0.75;
+  margin-right: 0.25rem;
+}
+
+.time-est-highlight {
+  color: var(--status-delayed-text);
+  font-weight: 600;
+}
+
 .terminal-gate {
   font-size: 0.8rem;
   font-weight: 600;
@@ -939,6 +950,74 @@ body {
   overflow-x: auto;
   border-top: 1px solid var(--border-color);
   max-height: 300px;
+}
+
+/* Segment Tabs UI (Multi-day Segment Selector) */
+.segment-tabs-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.25rem 0.6rem 0.25rem;
+  margin-bottom: 1rem;
+  scrollbar-width: thin;
+}
+
+.segment-tabs-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.segment-tabs-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.segment-tab-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: inherit;
+}
+
+.segment-tab-btn:hover {
+  border-color: var(--primary-blue);
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.segment-tab-btn.active {
+  background: var(--primary-blue);
+  color: #ffffff;
+  border-color: var(--primary-blue);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.segment-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  display: inline-block;
+}
+
+.segment-tab-btn.active .segment-status-dot {
+  background-color: #ffffff;
+}
+
+.segment-status-dot.dot-active {
+  background-color: var(--status-active-text);
+  box-shadow: 0 0 6px var(--status-active-text);
 }
 
 /* App Footer */
