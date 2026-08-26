@@ -1,5 +1,7 @@
 # Tailmark - Real-Time Flight Status Lookup
 
+(Proof of Concept)
+
 Tailmark is a single-page web application for tracking live flight statuses using AeroDataBox via RapidAPI. It features a Bring Your Own Key (BYOK) architecture and a 10-minute client-side localStorage caching mechanism to optimize network calls and API rate limits.
 
 <details>
