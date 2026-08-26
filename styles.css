@@ -4,40 +4,42 @@
 
 /* Design Tokens & CSS Variables */
 :root {
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  
+  --font-family:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+
   /* Palette - Modern Dark Theme */
   --bg-dark: #0f172a;
   --bg-card: #1e293b;
   --bg-card-hover: #334155;
   --bg-input: #0f172a;
   --bg-accent: #1e293b;
-  
+
   --border-color: #334155;
   --border-focus: #3b82f6;
   --border-light: rgba(255, 255, 255, 0.1);
-  
+
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  
+
   --primary-blue: #3b82f6;
   --primary-blue-hover: #2563eb;
   --primary-blue-glow: rgba(59, 130, 246, 0.35);
-  
+
   /* Flight Status Colors */
   --status-active-bg: rgba(34, 197, 94, 0.15);
   --status-active-text: #4ade80;
   --status-active-border: rgba(34, 197, 94, 0.3);
-  
+
   --status-landed-bg: rgba(16, 185, 129, 0.15);
   --status-landed-text: #34d399;
   --status-landed-border: rgba(16, 185, 129, 0.3);
-  
+
   --status-scheduled-bg: rgba(59, 130, 246, 0.15);
   --status-scheduled-text: #60a5fa;
   --status-scheduled-border: rgba(59, 130, 246, 0.3);
-  
+
   --status-delayed-bg: rgba(245, 158, 11, 0.15);
   --status-delayed-text: #fbbf24;
   --status-delayed-border: rgba(245, 158, 11, 0.3);
@@ -59,15 +61,17 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 24px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.5);
-  
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Reset & Global */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -82,9 +86,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-image: 
-    radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.06) 0%, transparent 40%);
+  background-image:
+    radial-gradient(
+      circle at 15% 15%,
+      rgba(59, 130, 246, 0.08) 0%,
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 85% 85%,
+      rgba(168, 85, 247, 0.06) 0%,
+      transparent 40%
+    );
   background-attachment: fixed;
 }
 
@@ -180,6 +192,15 @@ body {
   box-shadow: 0 0 8px var(--status-active-text);
 }
 
+/* Main Content Layout */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  flex: 1;
+}
+
 /* Cards */
 .card {
   background-color: var(--bg-card);
@@ -254,8 +275,8 @@ body {
   align-items: center;
 }
 
-.input-group input[type="password"],
-.input-group input[type="text"] {
+.input-group input[type='password'],
+.input-group input[type='text'] {
   flex: 1;
   background-color: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -491,7 +512,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Alert Notification Banner */
@@ -513,8 +536,14 @@ body {
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .alert-warning {
@@ -654,9 +683,18 @@ body {
 }
 
 @keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Cache Badge */
@@ -700,8 +738,12 @@ body {
   gap: 0.35rem;
 }
 
-.endpoint-dep { text-align: left; }
-.endpoint-arr { text-align: right; }
+.endpoint-dep {
+  text-align: left;
+}
+.endpoint-arr {
+  text-align: right;
+}
 
 .iata-code {
   font-size: 2.4rem;
@@ -785,7 +827,11 @@ body {
 .path-line-progress {
   position: absolute;
   height: 4px;
-  background: linear-gradient(90deg, var(--primary-blue) 0%, var(--status-active-text) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--primary-blue) 0%,
+    var(--status-active-text) 100%
+  );
   border-radius: 9999px;
   top: 50%;
   transform: translateY(-50%);
@@ -1006,8 +1052,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   overflow-x: auto;
-  padding: 0.25rem 0.25rem 0.6rem 0.25rem;
-  margin-bottom: 1rem;
+  padding: 0.25rem;
   scrollbar-width: thin;
 }
 
@@ -1093,7 +1138,7 @@ body {
   .app-container {
     padding: 1rem 0.75rem;
   }
-  
+
   .input-group {
     flex-direction: column;
     align-items: stretch;
@@ -1118,7 +1163,8 @@ body {
     text-align: center;
   }
 
-  .endpoint-dep, .endpoint-arr {
+  .endpoint-dep,
+  .endpoint-arr {
     text-align: center;
   }
 

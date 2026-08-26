@@ -480,26 +480,25 @@
 
   /**
    * Formats departure terminal and gate info cleanly.
-   * If gate is missing/undefined, displays "Gate Pending" in muted style rather than a standalone hyphen.
+   * Only renders fields if present. If gate/terminal are missing, renders nothing.
    */
   function formatTerminalGatePair(terminal, gate) {
-    const termDisplay = terminal ? `Term ${terminal}` : '';
-    const gateDisplay = gate ? `Gate ${gate}` : `<span class="gate-pending">Gate Pending</span>`;
-    if (termDisplay && gateDisplay) {
-      return `${termDisplay} • ${gateDisplay}`;
-    }
-    return termDisplay || gateDisplay;
+    const parts = [];
+    if (terminal) parts.push(`Term ${terminal}`);
+    if (gate) parts.push(`Gate ${gate}`);
+    return parts.length > 0 ? parts.join(' • ') : '';
   }
 
   /**
    * Formats arrival terminal, gate, and baggage belt cleanly.
+   * Only renders fields if present.
    */
   function formatArrivalTerminalGateBag(terminal, gate, baggageBelt) {
-    const termDisplay = terminal ? `Term ${terminal}` : '';
-    const gateDisplay = gate ? `Gate ${gate}` : `<span class="gate-pending">Gate Pending</span>`;
-    const bagDisplay = baggageBelt ? `Bag ${baggageBelt}` : '';
-    const parts = [termDisplay, gateDisplay, bagDisplay].filter(Boolean);
-    return parts.join(' • ');
+    const parts = [];
+    if (terminal) parts.push(`Term ${terminal}`);
+    if (gate) parts.push(`Gate ${gate}`);
+    if (baggageBelt) parts.push(`Bag ${baggageBelt}`);
+    return parts.length > 0 ? parts.join(' • ') : '';
   }
 
   function calculateFlightProgress(item) {
@@ -590,7 +589,7 @@
     const depGateInfo = formatTerminalGatePair(item.departure?.terminal, item.departure?.gate);
 
     const depSubtextHtml = depTimes.isDifferent
-      ? `Sched: <s>${depTimes.schedFormatted}</s> <span class="time-est-highlight">${depTimes.primaryFormatted}</span>`
+      ? `Sched: <s>${depTimes.schedFormatted}</s>`
       : `Sched: ${depTimes.schedFormatted}`;
 
     // Arrival details
@@ -600,7 +599,7 @@
     const arrGateInfo = formatArrivalTerminalGateBag(item.arrival?.terminal, item.arrival?.gate, item.arrival?.baggageBelt);
 
     const arrSubtextHtml = arrTimes.isDifferent
-      ? `Sched: <s>${arrTimes.schedFormatted}</s> <span class="time-est-highlight">${arrTimes.primaryFormatted}</span>`
+      ? `Sched: <s>${arrTimes.schedFormatted}</s>`
       : `Sched: ${arrTimes.schedFormatted}`;
 
     // Render Segment Selector Tabs if multiple segments exist
@@ -682,9 +681,7 @@
               <span class="time-main">${depTimes.primaryFormatted}</span>
               <span class="time-sub">${depSubtextHtml}</span>
             </div>
-            <div class="terminal-gate">
-              ${depGateInfo}
-            </div>
+            ${depGateInfo ? `<div class="terminal-gate">${depGateInfo}</div>` : ''}
           </div>
 
           <!-- Progress Bar Line -->
@@ -711,9 +708,7 @@
               <span class="time-main">${arrTimes.primaryFormatted}</span>
               <span class="time-sub">${arrSubtextHtml}</span>
             </div>
-            <div class="terminal-gate">
-              ${arrGateInfo}
-            </div>
+            ${arrGateInfo ? `<div class="terminal-gate">${arrGateInfo}</div>` : ''}
           </div>
         </div>
 
@@ -747,35 +742,6 @@
               <span class="metric-label">Aircraft Model</span>
               <span class="metric-value">${aircraftModel}</span>
               <span class="metric-subtext">${item.aircraft?.reg ? 'Tail: ' + item.aircraft.reg : 'Aircraft Info'}</span>
-            </div>
-          </div>
-
-          <!-- Departure Details -->
-          <div class="metric-card">
-            <div class="metric-icon-bg">
-              <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">Departure Terminal & Gate</span>
-              <span class="metric-value">${depGateInfo}</span>
-              <span class="metric-subtext">${depTimes.isDifferent ? 'Sched: ' + depTimes.schedFormatted : 'Scheduled On-Time'}</span>
-            </div>
-          </div>
-
-          <!-- Arrival Details -->
-          <div class="metric-card">
-            <div class="metric-icon-bg">
-              <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">Arrival Gate & Baggage</span>
-              <span class="metric-value">${arrGateInfo}</span>
-              <span class="metric-subtext">${arrTimes.isDifferent ? 'Sched: ' + arrTimes.schedFormatted : 'Scheduled On-Time'}</span>
             </div>
           </div>
         </div>
