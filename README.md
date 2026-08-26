@@ -2,7 +2,9 @@
 
 Tailmark is a single-page web application for tracking live flight statuses using AeroDataBox via RapidAPI. It features a Bring Your Own Key (BYOK) architecture and a 10-minute client-side localStorage caching mechanism to optimize network calls and API rate limits.
 
----
+<details>
+
+<summary>Expand for Key Features</summary>
 
 ## Key Features
 
@@ -29,42 +31,30 @@ Tailmark is a single-page web application for tracking live flight statuses usin
    - Built with vanilla HTML5, CSS3, and ES6 JavaScript with zero external frameworks or dependencies.
    - Includes an accordion payload inspector with one-click JSON clipboard copying.
 
----
+</details>
 
-## Local Setup Instructions
+## Local Setup
 
-No build steps or package installations required. Run locally with any standard HTTP server.
+No build steps required. Choose either option below to run locally:
 
-### Option 1: Using `npx serve` (Node.js)
-
-```bash
-npx -y serve ./
-```
-
-Open the printed local URL (e.g., `http://localhost:3000`) in your browser.
-
-### Option 2: Using Python HTTP Server
+### Option 1: Live Reload (`npx`)
 
 ```bash
-python3 -m http.server 8000
+npx live-server
+
 ```
 
-Visit `http://localhost:8000`.
+Starts a local server and automatically reloads the browser when files are saved.
 
-### Option 3: VS Code Live Server Extension
+### Option 2: Direct File Access
 
-1. Open project directory in Visual Studio Code.
-2. Right-click `index.html` and select **Open with Live Server**.
-
----
+Simply double-click `index.html` or drag it directly into any browser window.
 
 ## API Setup (RapidAPI / AeroDataBox)
 
 1. Create a free account at [RapidAPI.com](https://rapidapi.com/).
 2. Search for **AeroDataBox** and subscribe to the **Basic (Free)** tier.
 3. Copy your `x-rapidapi-key` header value and paste it into the Tailmark API configuration card.
-
----
 
 ## Client-Side Caching Engine
 
@@ -74,7 +64,7 @@ Entries are stored in `localStorage` using a scoped key structure:
 
 **Cache Key:** `aerodatabox_{FLIGHT_NUMBER}_{YYYY-MM-DD}`
 
-*Example:* `aerodatabox_DL1193_2026-08-25`
+_Example:_ `aerodatabox_DL1193_2026-08-25`
 
 ### 2. Cache Payload Structure
 
@@ -143,12 +133,3 @@ When a user submits a flight search:
 ### 4. Cache Bypass & Fresh Data Fetching
 
 Each cached result card provides a **Fetch Fresh Data** button. Clicking this button bypasses the 10-minute cache check, executes an immediate live fetch to AeroDataBox via RapidAPI, and updates the stored cache payload with fresh data.
-
----
-
-## Project Structure
-
-- `index.html`: Semantic HTML5 document containing application layout, input forms, and dynamic result containers.
-- `styles.css`: Dark-theme CSS design system with custom properties, grid/flexbox layouts, and status indicator components.
-- `app.js`: Core application logic managing input normalization, API authentication, local caching, time parsing, segment selection, and DOM updates.
-- `README.md`: Project technical documentation and setup guide.
