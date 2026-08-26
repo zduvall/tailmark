@@ -71,8 +71,10 @@ Visit `http://localhost:8000`.
 ### 1. Cache Key Format
 
 Entries are stored in `localStorage` using a scoped key structure:
-$$\text{Cache Key} = \text{aerodatabox\_\{FLIGHT\_NUMBER\}\_\{YYYY-MM-DD\}}$$
-_Example:_ `aerodatabox_DL1193_2026-08-25`
+
+**Cache Key:** `aerodatabox_{FLIGHT_NUMBER}_{YYYY-MM-DD}`
+
+*Example:* `aerodatabox_DL1193_2026-08-25`
 
 ### 2. Cache Payload Structure
 
