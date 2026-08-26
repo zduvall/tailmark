@@ -1,88 +1,84 @@
-# ✈️ Tailmark - Real-Time Flight Status Lookup (Proof of Concept)
+# Tailmark - Real-Time Flight Status Lookup
 
-Tailmark is a lightweight, responsive, single-page web application for looking up live flight statuses using the **AeroDataBox API via RapidAPI**. It implements a **Bring Your Own Key (BYOK)** pattern and an onboard **10-minute client-side `localStorage` caching mechanism** to preserve API rate limits and conserve monthly quota usage.
+Tailmark is a single-page web application for tracking live flight statuses using AeroDataBox via RapidAPI. It features a Bring Your Own Key (BYOK) architecture and a 10-minute client-side localStorage caching mechanism to optimize network calls and API rate limits.
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 1. **API Key Management (BYOK Pattern):**
-   - Enter and store your personal RapidAPI key directly in your browser.
-   - API keys are persisted securely in `localStorage` under `tailmark_rapidapi_key` and never transmitted to any intermediary servers.
-   - Includes controls to edit, toggle key visibility, or clear your stored key at any time.
+   - Store RapidAPI keys locally in browser `localStorage` (`tailmark_rapidapi_key`).
+   - Keys are kept strictly client-side and never sent to intermediary servers.
+   - Includes controls to view, edit, toggle visibility, or clear stored keys.
 
 2. **Real-Time Flight Tracking:**
-   - Track live flight statuses by inputting any valid flight number (e.g., `DL1193`, `AA100`, `UA2402`, `BA178`).
-   - Automatically normalizes inputs (trims whitespace, converts to uppercase).
-   - Displays live flight progress bar, status badges (`EnRoute`, `Expected`, `Landed`, `Scheduled`, `Cancelled`), departure and arrival airport codes, cities, scheduled and actual/revised times, terminals, gates, baggage belts, and aircraft model.
+   - Supports live flight lookups by IATA/ICAO flight number (e.g., `DL1193`, `AA100`, `UA2402`).
+   - Displays real-time estimated vs scheduled departure/arrival times, gate/terminal info, status badges, progress indicators, aircraft model, and baggage claim details.
 
 3. **Multi-Day Segment Tabs & Smart Selection:**
-   - When AeroDataBox returns multiple flight legs across 24–48 hours, renders a horizontal tab bar (e.g. `Mon, Aug 24`, `Tue, Aug 25`).
-   - Automatically auto-selects the default active segment based on priority rules (Active `EnRoute`/`Boarding`, Recently Landed `< 1 hr`, or Next Upcoming flight).
-   - Allows immediate tab switching without triggering new API calls.
+   - Automatically parses AeroDataBox response arrays for multi-leg flights within 24–48 hour windows.
+   - Auto-selects default active segment using priority logic: Active status (`EnRoute`/`Boarding`) > Recently Landed (< 1 hour) > Next Upcoming Flight.
+   - Enables instant tab switching between segments without additional network requests.
 
 4. **Client-Side Caching (10-Minute TTL):**
-   - Prevents redundant network requests to RapidAPI by caching API responses in browser `localStorage`.
-   - Served instantly if requested within 10 minutes of the previous lookup.
-   - Clear visual indicators (⚡ **Cached Result** vs 🟢 **Live Request**) with an optional "Fetch Fresh Data" bypass button.
+   - Caches API payloads in `localStorage` scoped by flight number and date (`aerodatabox_{FLIGHT_NUMBER}_{YYYY-MM-DD}`).
+   - Serves cached responses instantly for requests within 10 minutes.
+   - Provides explicit visual cache indicators and a manual "Fetch Fresh Data" bypass button.
 
-5. **Modern Raw CSS Aesthetics:**
-   - Built with modern HTML5 and CSS3 (CSS Custom Properties, Flexbox & CSS Grid, glassmorphism card styling, responsive layouts, micro-animations, accessible color hierarchy). No heavyweight frameworks required.
+5. **Developer Tools & Raw CSS Styling:**
+   - Built with vanilla HTML5, CSS3, and ES6 JavaScript with zero external frameworks or dependencies.
+   - Includes an accordion payload inspector with one-click JSON clipboard copying.
 
 ---
 
-## 🚀 Local Setup Instructions
+## Local Setup Instructions
 
-No build steps or Node modules installation required! You can run Tailmark locally using any simple HTTP web server.
+No build steps or package installations required. Run locally with any standard HTTP server.
 
 ### Option 1: Using `npx serve` (Node.js)
-
-Run the following command in the project root directory:
 
 ```bash
 npx -y serve ./
 ```
 
-Then open the local URL (e.g., `http://localhost:3000`) in your web browser.
+Open the printed local URL (e.g., `http://localhost:3000`) in your browser.
 
 ### Option 2: Using Python HTTP Server
-
-If you have Python installed:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then visit `http://localhost:8000`.
+Visit `http://localhost:8000`.
 
 ### Option 3: VS Code Live Server Extension
 
-1. Open the project folder in Visual Studio Code.
-2. Right-click `index.html` and choose **"Open with Live Server"**.
+1. Open project directory in Visual Studio Code.
+2. Right-click `index.html` and select **Open with Live Server**.
 
 ---
 
-## 🔑 How to Get a Free RapidAPI Key
+## API Setup (RapidAPI / AeroDataBox)
 
 1. Create a free account at [RapidAPI.com](https://rapidapi.com/).
 2. Search for **AeroDataBox** and subscribe to the **Basic (Free)** tier.
-3. Copy the `x-rapidapi-key` header value from the code snippet panel and paste it into Tailmark.
+3. Copy your `x-rapidapi-key` header value and paste it into the Tailmark API configuration card.
 
 ---
 
-## 🧠 Client-Side Caching Mechanism (`localStorage`)
-
-To optimize performance and conserve the user's free monthly RapidAPI quota, Tailmark implements a custom client-side caching engine in [`app.js`](app.js):
+## Client-Side Caching Engine
 
 ### 1. Cache Key Format
 
-Cache entries are stored in `localStorage` using a scoped key format:
+Entries are stored in `localStorage` using a scoped key structure:
 $$\text{Cache Key} = \text{aerodatabox\_\{FLIGHT\_NUMBER\}\_\{YYYY-MM-DD\}}$$
 _Example:_ `aerodatabox_DL1193_2026-08-25`
 
 ### 2. Cache Payload Structure
 
-Each cached item is saved as a serialized JSON object containing a timestamp and the original AeroDataBox API response array:
+<details>
+
+<summary>Expand to see full structure</summary>
 
 ```json
 {
@@ -111,6 +107,8 @@ Each cached item is saved as a serialized JSON object containing a timestamp and
 }
 ```
 
+</details>
+
 ### 3. Caching Workflow & TTL Check
 
 When a user submits a flight search:
@@ -132,7 +130,7 @@ When a user submits a flight search:
                         │
                 Is Age < 10 minutes (600,000 ms)?
                         ├── YES ──► [ Serve from localStorage immediately ]
-                        │           Show "⚡ Cached Result" Badge
+                        │           Show Cached Result Badge
                         │
                         └── NO  ──► [ Cache Expired: Remove Key ]
                                            │
@@ -142,13 +140,13 @@ When a user submits a flight search:
 
 ### 4. Cache Bypass & Fresh Data Fetching
 
-Each cached result card provides a **"Fetch Fresh Data"** button. Clicking this button bypasses the 10-minute cache check, executes an immediate live fetch to AeroDataBox via RapidAPI, and updates the stored cache payload with fresh data.
+Each cached result card provides a **Fetch Fresh Data** button. Clicking this button bypasses the 10-minute cache check, executes an immediate live fetch to AeroDataBox via RapidAPI, and updates the stored cache payload with fresh data.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
-- `index.html`: Semantic HTML5 document with accessible forms, RapidAPI key controls, quick-test flight chips, and flight detail containers.
-- `styles.css`: CSS design system containing custom properties, modern dark theme styling, responsive grid layouts, animations, and status indicators.
-- `app.js`: Application logic handling input normalization, BYOK key storage (`tailmark_rapidapi_key`), `localStorage` 10-minute cache validation, fetch network requests to AeroDataBox, and DOM rendering.
-- `README.md`: Project documentation and setup guide.
+- `index.html`: Semantic HTML5 document containing application layout, input forms, and dynamic result containers.
+- `styles.css`: Dark-theme CSS design system with custom properties, grid/flexbox layouts, and status indicator components.
+- `app.js`: Core application logic managing input normalization, API authentication, local caching, time parsing, segment selection, and DOM updates.
+- `README.md`: Project technical documentation and setup guide.

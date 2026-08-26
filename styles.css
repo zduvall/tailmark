@@ -943,6 +943,7 @@ body {
 
 .raw-json-block {
   padding: 1rem;
+  padding-top: 2.2rem;
   font-family: monospace;
   font-size: 0.75rem;
   background-color: #090d16;
@@ -950,6 +951,53 @@ body {
   overflow-x: auto;
   border-top: 1px solid var(--border-color);
   max-height: 300px;
+  border-radius: 0 0 8px 8px;
+}
+
+/* Gate Pending Muted Style */
+.gate-pending {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+/* JSON Preview & Copy Button */
+.json-preview-container {
+  position: relative;
+  width: 100%;
+}
+
+.btn-copy-json {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary);
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-copy-json:hover {
+  background: var(--primary-blue);
+  color: #ffffff;
+  border-color: var(--primary-blue);
+}
+
+.btn-copy-json.copied {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
 }
 
 /* Segment Tabs UI (Multi-day Segment Selector) */

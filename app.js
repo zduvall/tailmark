@@ -243,7 +243,7 @@
           if (depMs >= now) {
             isUpcoming = true;
           }
-          if (isUpcoming && (depMs - now) >= -300000) { // Future or within 5m past
+          if (isUpcoming && (depMs - now) >= -300000) {
             const diff = Math.abs(depMs - now);
             if (diff < minFutureDiff) {
               minFutureDiff = diff;
@@ -479,23 +479,27 @@
   }
 
   /**
-   * Formats terminal and gate side-by-side cleanly.
-   * If a field is missing, displays "—" for consistent layout structure.
+   * Formats departure terminal and gate info cleanly.
+   * If gate is missing/undefined, displays "Gate Pending" in muted style rather than a standalone hyphen.
    */
   function formatTerminalGatePair(terminal, gate) {
-    const termDisplay = terminal ? `Term ${terminal}` : 'Term —';
-    const gateDisplay = gate ? `Gate ${gate}` : 'Gate —';
-    return `${termDisplay} • ${gateDisplay}`;
+    const termDisplay = terminal ? `Term ${terminal}` : '';
+    const gateDisplay = gate ? `Gate ${gate}` : `<span class="gate-pending">Gate Pending</span>`;
+    if (termDisplay && gateDisplay) {
+      return `${termDisplay} • ${gateDisplay}`;
+    }
+    return termDisplay || gateDisplay;
   }
 
   /**
    * Formats arrival terminal, gate, and baggage belt cleanly.
    */
   function formatArrivalTerminalGateBag(terminal, gate, baggageBelt) {
-    const termDisplay = terminal ? `Term ${terminal}` : 'Term —';
-    const gateDisplay = gate ? `Gate ${gate}` : 'Gate —';
-    const bagDisplay = baggageBelt ? `Bag ${baggageBelt}` : null;
-    return bagDisplay ? `${termDisplay} • ${gateDisplay} • ${bagDisplay}` : `${termDisplay} • ${gateDisplay}`;
+    const termDisplay = terminal ? `Term ${terminal}` : '';
+    const gateDisplay = gate ? `Gate ${gate}` : `<span class="gate-pending">Gate Pending</span>`;
+    const bagDisplay = baggageBelt ? `Bag ${baggageBelt}` : '';
+    const parts = [termDisplay, gateDisplay, bagDisplay].filter(Boolean);
+    return parts.join(' • ');
   }
 
   function calculateFlightProgress(item) {
@@ -782,7 +786,16 @@
             <span>Developer View: AeroDataBox Raw API JSON Response</span>
             <span>▼</span>
           </summary>
-          <pre class="raw-json-block">${JSON.stringify(apiResponse, null, 2)}</pre>
+          <div class="json-preview-container">
+            <button type="button" id="copyJsonBtn" class="btn-copy-json" title="Copy JSON to clipboard">
+              <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span id="copyJsonBtnText">Copy JSON</span>
+            </button>
+            <pre class="raw-json-block">${JSON.stringify(apiResponse, null, 2)}</pre>
+          </div>
         </details>
       </div>
     `;
@@ -797,6 +810,25 @@
         renderFlightResult(apiResponse, flightNumber, isCached, cacheInfo, clickedIdx);
       });
     });
+
+    // Attach event listener for Copy JSON button
+    const copyJsonBtn = document.getElementById('copyJsonBtn');
+    if (copyJsonBtn) {
+      copyJsonBtn.addEventListener('click', () => {
+        const rawJsonText = JSON.stringify(apiResponse, null, 2);
+        navigator.clipboard.writeText(rawJsonText).then(() => {
+          const btnText = document.getElementById('copyJsonBtnText');
+          if (btnText) btnText.textContent = 'Copied!';
+          copyJsonBtn.classList.add('copied');
+          setTimeout(() => {
+            if (btnText) btnText.textContent = 'Copy JSON';
+            copyJsonBtn.classList.remove('copied');
+          }, 2000);
+        }).catch((err) => {
+          console.error('Failed to copy JSON:', err);
+        });
+      });
+    }
 
     // Attach event listener for Force Refresh button if rendered
     const forceRefreshBtn = document.getElementById('forceRefreshBtn');
