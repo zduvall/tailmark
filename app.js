@@ -185,6 +185,36 @@
      ========================================================================== */
 
   /**
+   * Precedence hierarchies for extracting the most relevant operational timestamp
+   * from arrival or departure endpoint objects.
+   */
+  const TIME_PRECEDENCE = {
+    DISPLAY: ['actual', 'revised', 'runway', 'scheduled', 'predicted'],
+    LANDED: ['revised', 'runway', 'scheduled', 'predicted'],
+    UPCOMING: ['revised', 'scheduled', 'predicted', 'runway'],
+    OPERATIONAL: ['revised', 'scheduled', 'runway', 'predicted'],
+    DELAY: ['revised', 'runway', 'predicted']
+  };
+
+  /**
+   * Resolves the highest-priority available local timestamp string from an endpoint.
+   * Supports field prefixes ('revised', 'runway') or full property names ('revisedTime', 'runwayTime').
+   *
+   * @param {Object} endpoint - The departure or arrival object.
+   * @param {Array<string>} [priority=TIME_PRECEDENCE.DISPLAY] - Order of preference.
+   * @returns {string|null} - The local ISO/datetime string, or null if none found.
+   */
+  function getEndpointLocalTime(endpoint, priority = TIME_PRECEDENCE.DISPLAY) {
+    if (!endpoint) return null;
+    for (const key of priority) {
+      const prop = key.endsWith('Time') ? key : `${key}Time`;
+      const val = endpoint[prop]?.local;
+      if (val) return val;
+    }
+    return null;
+  }
+
+  /**
    * Smart Default Tab Selection logic:
    * Rule 1. Active Flight: EnRoute, Boarding, CheckIn, Active, in-flight.
    * Rule 2. Recently Landed (< 1 hour): Landed / Arrived within last 60 minutes relative to current time.
@@ -209,10 +239,7 @@
       const item = data[i];
       const s = (item.status || '').toLowerCase().replace(/[\s\-_]/g, '');
       if (landedStates.includes(s)) {
-        const arrTimeStr = item.arrival?.actualTime?.local ||
-                           item.arrival?.revisedTime?.local ||
-                           item.arrival?.predictedTime?.local ||
-                           item.arrival?.scheduledTime?.local;
+        const arrTimeStr = getEndpointLocalTime(item.arrival, TIME_PRECEDENCE.LANDED);
         if (arrTimeStr) {
           const arrMs = new Date(arrTimeStr).getTime();
           if (!isNaN(arrMs)) {
@@ -232,10 +259,7 @@
     for (let i = 0; i < data.length; i++) {
       const item = data[i];
       const s = (item.status || '').toLowerCase().replace(/[\s\-_]/g, '');
-      const depTimeStr = item.departure?.scheduledTime?.local ||
-                         item.departure?.revisedTime?.local ||
-                         item.departure?.predictedTime?.local ||
-                         item.departure?.actualTime?.local;
+      const depTimeStr = getEndpointLocalTime(item.departure, TIME_PRECEDENCE.UPCOMING);
       let isUpcoming = (s === 'scheduled' || s === 'expected');
       if (depTimeStr) {
         const depMs = new Date(depTimeStr).getTime();
@@ -263,8 +287,7 @@
     let minDiff = Infinity;
     for (let i = 0; i < data.length; i++) {
       const item = data[i];
-      const depTimeStr = item.departure?.scheduledTime?.local ||
-                         item.departure?.actualTime?.local;
+      const depTimeStr = getEndpointLocalTime(item.departure, TIME_PRECEDENCE.OPERATIONAL);
       if (depTimeStr) {
         const depMs = new Date(depTimeStr).getTime();
         if (!isNaN(depMs)) {
@@ -284,9 +307,7 @@
    * Helper to format tab label for segment date selector (e.g., "Mon, Aug 24 (JFK-LAX)")
    */
   function formatSegmentTabLabel(item, index) {
-    const depTimeStr = item.departure?.scheduledTime?.local ||
-                       item.departure?.actualTime?.local ||
-                       item.departure?.revisedTime?.local;
+    const depTimeStr = getEndpointLocalTime(item.departure, TIME_PRECEDENCE.OPERATIONAL);
     let dateStr = `Leg ${index + 1}`;
     if (depTimeStr) {
       try {
@@ -446,7 +467,7 @@
   }
 
   /**
-   * Extracts primary estimated time (actualTime > revisedTime > predictedTime > scheduledTime)
+   * Extracts primary estimated time (actualTime > revisedTime > runwayTime > scheduledTime > predictedTime)
    * and compares with baseline scheduledTime.
    */
   function extractTimeDetails(endpointObj) {
@@ -457,12 +478,7 @@
     const schedRaw = endpointObj.scheduledTime?.local;
     const schedFormatted = formatTime(schedRaw);
 
-    const primaryRaw = endpointObj.actualTime?.local ||
-                       endpointObj.revisedTime?.local ||
-                       endpointObj.predictedTime?.local ||
-                       endpointObj.runwayTime?.local ||
-                       schedRaw;
-
+    const primaryRaw = getEndpointLocalTime(endpointObj, TIME_PRECEDENCE.DISPLAY);
     const primaryFormatted = formatTime(primaryRaw);
 
     const isDifferent = (
@@ -512,30 +528,16 @@
 
   function calculateDelay(item) {
     if (!item) return 0;
-    const depSched = item.departure?.scheduledTime?.local;
-    const depPrimary = item.departure?.actualTime?.local ||
-                       item.departure?.revisedTime?.local ||
-                       item.departure?.predictedTime?.local ||
-                       item.departure?.runwayTime?.local;
-    if (depSched && depPrimary) {
-      const sMs = new Date(depSched).getTime();
-      const pMs = new Date(depPrimary).getTime();
-      if (!isNaN(sMs) && !isNaN(pMs)) {
-        const diff = Math.round((pMs - sMs) / 60000);
-        if (diff > 0) return diff;
-      }
-    }
-    const arrSched = item.arrival?.scheduledTime?.local;
-    const arrPrimary = item.arrival?.actualTime?.local ||
-                       item.arrival?.revisedTime?.local ||
-                       item.arrival?.predictedTime?.local ||
-                       item.arrival?.runwayTime?.local;
-    if (arrSched && arrPrimary) {
-      const sMs = new Date(arrSched).getTime();
-      const pMs = new Date(arrPrimary).getTime();
-      if (!isNaN(sMs) && !isNaN(pMs)) {
-        const diff = Math.round((pMs - sMs) / 60000);
-        if (diff > 0) return diff;
+    for (const endpoint of [item.departure, item.arrival]) {
+      const sched = endpoint?.scheduledTime?.local;
+      const primary = getEndpointLocalTime(endpoint, TIME_PRECEDENCE.DELAY);
+      if (sched && primary) {
+        const sMs = new Date(sched).getTime();
+        const pMs = new Date(primary).getTime();
+        if (!isNaN(sMs) && !isNaN(pMs)) {
+          const diff = Math.round((pMs - sMs) / 60000);
+          if (diff > 0) return diff;
+        }
       }
     }
     return 0;
